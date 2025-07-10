@@ -1,0 +1,61 @@
+Penjelasan Fitur, Library, dan Komponen Web Monitoring
+====================================================
+
+Fitur Utama:
+------------
+1. Autentikasi & Registrasi
+   - Login, register, reset password, verifikasi email, konfirmasi password.
+   - Middleware untuk membedakan akses user dan admin.
+
+2. Dashboard User & Admin
+   - Dashboard khusus untuk user dan admin, masing-masing dengan tampilan dan data berbeda.
+   - User dapat memilih lokasi dan rentang waktu data sensor.
+
+3. Manajemen Sensor
+   - CRUD data sensor (tambah, edit, lihat daftar sensor).
+   - Melihat data log sensor berdasarkan lokasi dan waktu.
+
+4. Manajemen Log Sensor
+   - User dapat melihat log sensor dan melakukan export data log.
+
+5. Manajemen Profil
+   - Edit profil, ubah password, dan hapus akun.
+
+6. Tema/Tampilan
+   - Sidebar untuk navigasi lokasi.
+   - Tampilan responsif dengan dark mode.
+
+Library/Framework yang Digunakan:
+---------------------------------
+- Laravel: Framework backend utama.
+- Inertia.js: Untuk bridging antara Laravel (backend) dan React (frontend).
+- React: Library utama untuk membangun UI frontend.
+- Tailwind CSS: Untuk styling dan utility-first CSS.
+- @inertiajs/react: Library React untuk Inertia.js.
+- laravel-vite-plugin: Untuk integrasi Vite dengan Laravel.
+- spatie/laravel-permission: Untuk manajemen role dan permission user.
+
+Komponen yang Digunakan:
+------------------------
+- Pages
+  - User/Dashboard.jsx: Dashboard user.
+  - User/Log/Index.jsx: Daftar log sensor untuk user.
+  - Admin/Dashboard.jsx: Dashboard admin.
+  - Sensors/Index.jsx, Sensors/Create.jsx, Sensors/Edit.jsx: Manajemen sensor.
+  - Auth/: Komponen untuk login, register, reset password, dll.
+  - Profile/Edit.jsx, Profile/Partials/: Edit profil, update password, hapus akun.
+  - Welcome/Welcome.jsx: Halaman landing/beranda.
+
+- Tema/Tampilan
+  - Tema/Sidebar.jsx: Sidebar navigasi lokasi (sebelumnya di User, kini di Tema).
+  - Komponen Tailwind untuk tombol, layout, dsb.
+
+- Components
+  - ApplicationLogo.jsx, Checkbox.jsx, DangerButton.jsx, Dropdown.jsx, InputError.jsx, InputLabel.jsx, Modal.jsx, NavLink.jsx, PrimaryButton.jsx, ResponsiveNavLink.jsx, SecondaryButton.jsx, TextInput.jsx: Komponen UI reusable.
+
+- Layouts
+  - AuthenticatedLayout.jsx, GuestLayout.jsx: Layout untuk user yang sudah login dan tamu.
+
+Ringkasan:
+----------
+Web ini adalah aplikasi monitoring dengan autentikasi, dashboard user/admin, manajemen sensor, log sensor, dan pengaturan profil. Menggunakan Laravel, React, Inertia.js, dan Tailwind CSS, serta beberapa komponen UI custom dan layout untuk tampilan yang konsisten dan responsif.

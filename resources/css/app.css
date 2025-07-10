@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Preferences-based CSS Variables */
+:root {
+  --animation-duration: 0.3s;
+  --transition-duration: 0.2s;
+  --contrast-multiplier: 1;
+}
+
+/* Apply animation preferences */
+* {
+  animation-duration: var(--animation-duration) !important;
+  transition-duration: var(--transition-duration) !important;
+}
+
+/* High contrast mode support */
+.high-contrast {
+  --tw-bg-opacity: 1;
+  filter: contrast(var(--contrast-multiplier, 1.5));
+}
+
+/* Large text support */
+.large-text {
+  font-size: 1.125rem !important;
+}
+
+.large-text h1 {
+  font-size: 2.5rem !important;
+}
+
+.large-text h2 {
+  font-size: 2rem !important;
+}
+
+.large-text h3 {
+  font-size: 1.5rem !important;
+}
+
+.large-text p, .large-text span, .large-text div {
+  font-size: 1.125rem !important;
+}
+
+/* No animations when disabled */
+.no-animations * {
+  animation: none !important;
+  transition: none !important;
+  transform: none !important;
+}
+
+/* Theme transition support */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Focus styles for accessibility */
+.focus-visible:focus {
+  outline: 2px solid #3B82F6;
+  outline-offset: 2px;
+}
+
+/* Custom scrollbar for dark mode */
+.dark::-webkit-scrollbar {
+  width: 8px;
+}
+
+.dark::-webkit-scrollbar-track {
+  background: #1e293b;
+}
+
+.dark::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+
+.dark::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+

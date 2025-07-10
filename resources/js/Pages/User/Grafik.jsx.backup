@@ -1,0 +1,449 @@
+import React, { useState, useEffect } from 'react';
+import UserLayout from './UserLayout';
+import HeaderGlobal from '../../Components/HeaderGlobal';
+import FooterGlobal from '../../Components/FooterGlobal';
+import SensorChart from '../../Components/SensorChart';
+import { usePreferences } from '../../Contexts/PreferencesContext';
+
+export default function Grafik() {
+  const [sensors, setSensors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [lastUpdate, setLastUpdate] = useState(null);
+
+  const { getText } = usePreferences();
+
+  // Define all available sensors with their metadata
+  const allSensors = [
+    {
+      sensor_type: 'current_in',
+      icon: '⚡',
+      unit: 'A',
+    },
+    {
+      sensor_type: 'current_out',
+      icon: '🔌',
+      unit: 'A',
+    },
+    {
+      sensor_type: 'voltage_in',
+      icon: '🔋',
+      unit: 'V',
+    },
+    {
+      sensor_type: 'voltage_out',
+      icon: '⚡',
+      unit: 'V',
+    },
+    {
+      sensor_type: 'temperature',
+      icon: '🌡️',
+      unit: '°C',
+    },
+    {
+      sensor_type: 'lux',
+      icon: '💡',
+      unit: 'lx',
+    },
+    {
+      sensor_type: 'battery_percentage',
+      icon: '🔋',
+      unit: '%',
+    }
+  ];
+
+  // Function to fetch data based on time range
+  const fetchDataForRange = async (range) => {
+    console.log(`📊 Fetching data for range: ${range}`);
+    
+    // Determine if this is real-time or historical based on range
+    const isRealtime = ['1m', '5m', '10m'].includes(range);
+    const endpoint = isRealtime ? '/api/antares/realtime' : '/api/sensor-data/historical';
+    
+    try {
+      const url = isRealtime ? endpoint : `${endpoint}?range=${range}`;
+      console.log(`📡 Fetching from: ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} from ${url}`);
+      }
+      
+      const result = await response.json();
+      console.log(`📊 ${isRealtime ? 'Antares' : 'Historical'} API response:`, result);
+      
+      if (result.status === 'success' && result.data) {
+        return { data: result.data, isRealtime };
+      } else {
+        throw new Error(result.message || 'Invalid API response');
+      }
+    } catch (error) {
+      console.error(`❌ Error fetching ${isRealtime ? 'real-time' : 'historical'} data:`, error);
+      throw error;
+    }
+  };
+
+  // Convert fetched data to chart format
+  const convertToChartData = (fetchedData, isRealtime, timeRange = '1h') => {
+    if (isRealtime) {
+      // Real-time data from Antares - single data point, generate historical simulation
+      const realData = fetchedData;
+      const totalPoints = 20;
+      const interval = timeRange === '1m' ? 3000 : timeRange === '5m' ? 15000 : 30000;
+      const now = new Date();
+      
+      const generateHistoricalPoints = (currentValue, sensorType) => {
+        const numericValue = parseFloat(currentValue) || 0;
+        return Array.from({ length: totalPoints }, (_, i) => {
+          if (i === totalPoints - 1) {
+            return {
+              timestamp: now,
+              value: numericValue
+            };
+          } else {
+            const timeOffset = new Date(now.getTime() - (totalPoints - 1 - i) * interval);
+            const variance = numericValue * 0.05;
+            let simulatedValue = numericValue + (Math.random() - 0.5) * variance;
+            const trendFactor = Math.sin((i / totalPoints) * Math.PI * 2) * (numericValue * 0.1);
+            simulatedValue += trendFactor;
+            
+            if (sensorType !== 'temperature' && simulatedValue < 0) {
+              simulatedValue = Math.abs(simulatedValue);
+            }
+            
+            return {
+              timestamp: timeOffset,
+              value: parseFloat(simulatedValue.toFixed(2))
+            };
+          }
+        });
+      };
+      
+      return [
+        {
+          sensor_type: 'current_in',
+          label: getText('sensor.current_in'),
+          unit: 'A',
+          icon: '⚡',
+          data_points: generateHistoricalPoints(realData.current_in || 0, 'current_in')
+        },
+        {
+          sensor_type: 'current_out',
+          label: getText('sensor.current_out'),
+          unit: 'A',
+          icon: '⚡',
+          data_points: generateHistoricalPoints(realData.current_out || 0, 'current_out')
+        },
+        {
+          sensor_type: 'voltage_in',
+          label: getText('sensor.voltage_in'),
+          unit: 'V',
+          icon: '🔋',
+          data_points: generateHistoricalPoints(realData.voltage_in || 0, 'voltage_in')
+        },
+        {
+          sensor_type: 'voltage_out',
+          label: getText('sensor.voltage_out'),
+          unit: 'V',
+          icon: '🔋',
+          data_points: generateHistoricalPoints(realData.voltage_out || 0, 'voltage_out')
+        },
+        {
+          sensor_type: 'temperature',
+          label: getText('sensor.temperature'),
+          unit: getTemperatureUnit(),
+          icon: '🌡️',
+          data_points: generateHistoricalPoints(convertTemperature(realData.temperature || 25), 'temperature')
+        },
+        {
+          sensor_type: 'lux',
+          label: getText('sensor.lux'),
+          unit: 'Lux',
+          icon: '💡',
+          data_points: generateHistoricalPoints(realData.lux || 0, 'lux')
+        },
+        {
+          sensor_type: 'battery_percentage',
+          label: getText('sensor.battery_percentage'),
+          unit: '%',
+          icon: '🔋',
+          data_points: generateHistoricalPoints(realData.battery_percentage || 50, 'battery_percentage')
+        }
+      ];
+    } else {
+      // Historical data from database - array of data points
+      const histData = Array.isArray(fetchedData) ? fetchedData : [];
+      
+      return [
+        {
+          sensor_type: 'current_in',
+          label: getText('sensor.current_in'),
+          unit: 'A',
+          icon: '⚡',
+          data_points: histData.map(item => ({
+            timestamp: new Date(item.time_group),
+            value: parseFloat(item.current_in || 0)
+          }))
+        },
+        {
+          sensor_type: 'current_out',
+          label: getText('sensor.current_out'),
+          unit: 'A',
+          icon: '⚡',
+          data_points: histData.map(item => ({
+            timestamp: new Date(item.time_group),
+            value: parseFloat(item.current_out || 0)
+          }))
+        },
+        {
+          sensor_type: 'voltage_in',
+          label: getText('sensor.voltage_in'),
+          unit: 'V',
+          icon: '🔋',
+          data_points: histData.map(item => ({
+            timestamp: new Date(item.time_group),
+            value: parseFloat(item.voltage_in || 0)
+          }))
+        },
+        {
+          sensor_type: 'voltage_out',
+          label: getText('sensor.voltage_out'),
+          unit: 'V',
+          icon: '🔋',
+          data_points: histData.map(item => ({
+            timestamp: new Date(item.time_group),
+            value: parseFloat(item.voltage_out || 0)
+          }))
+        },
+        {
+          sensor_type: 'temperature',
+          label: getText('sensor.temperature'),
+          unit: getTemperatureUnit(),
+          icon: '🌡️',
+          data_points: histData.map(item => ({
+            timestamp: new Date(item.time_group),
+            value: convertTemperature(parseFloat(item.temperature || 25))
+          }))
+        },
+        {
+          sensor_type: 'lux',
+          label: getText('sensor.lux'),
+          unit: 'Lux',
+          icon: '💡',
+          data_points: histData.map(item => ({
+            timestamp: new Date(item.time_group),
+            value: parseFloat(item.lux || 0)
+          }))
+        },
+        {
+          sensor_type: 'battery_percentage',
+          label: getText('sensor.battery_percentage'),
+          unit: '%',
+          icon: '🔋',
+          data_points: histData.map(item => ({
+            timestamp: new Date(item.time_group),
+            value: parseFloat(item.battery_percentage || 50)
+          }))
+        }
+      ];
+    }
+  };
+
+  // Function to handle individual chart data fetching
+  const fetchChartDataForRange = async (range) => {
+    try {
+      const { data, isRealtime } = await fetchDataForRange(range);
+      return convertToChartData(data, isRealtime, range);
+    } catch (error) {
+      console.error('Error fetching chart data:', error);
+      return [];
+    }
+  };
+
+  // Function to handle individual chart data fetch requests
+  const handleChartDataFetch = async (sensorType, range) => {
+    console.log(`📊 Individual chart fetch: ${sensorType} for range ${range}`);
+    
+    try {
+      const newChartData = await fetchChartDataForRange(range);
+      
+      // Update the global chartData state with new data for all sensors
+      setChartData(newChartData);
+      
+      return newChartData;
+    } catch (error) {
+      console.error(`❌ Error fetching data for ${sensorType}:`, error);
+      throw error;
+    }
+  };
+
+  // Mock data fallback
+  const generateMockChartData = useCallback(() => {
+    const totalPoints = 20;
+    const interval = 60000; // 1 minute intervals
+    const now = new Date();
+
+    return [
+      {
+        sensor_type: 'current_in',
+        label: getText('sensor.current_in'),
+        unit: 'A',
+        icon: '⚡',
+        data_points: Array.from({ length: totalPoints }, (_, i) => ({
+          timestamp: new Date(now.getTime() - (totalPoints - 1 - i) * interval),
+          value: 2.0 + Math.sin(i * 0.1) * 0.3 + (Math.random() - 0.5) * 0.1
+        }))
+      },
+      {
+        sensor_type: 'current_out',
+        label: getText('sensor.current_out'),
+        unit: 'A',
+        icon: '⚡',
+        data_points: Array.from({ length: totalPoints }, (_, i) => ({
+          timestamp: new Date(now.getTime() - (totalPoints - 1 - i) * interval),
+          value: 1.8 + Math.cos(i * 0.15) * 0.2 + (Math.random() - 0.5) * 0.08
+        }))
+      },
+      {
+        sensor_type: 'voltage_in',
+        label: getText('sensor.voltage_in'),
+        unit: 'V',
+        icon: '🔋',
+        data_points: Array.from({ length: totalPoints }, (_, i) => ({
+          timestamp: new Date(now.getTime() - (totalPoints - 1 - i) * interval),
+          value: 12.0 + Math.sin(i * 0.05) * 0.5 + (Math.random() - 0.5) * 0.2
+        }))
+      },
+      {
+        sensor_type: 'voltage_out',
+        label: getText('sensor.voltage_out'),
+        unit: 'V',
+        icon: '🔋',
+        data_points: Array.from({ length: totalPoints }, (_, i) => ({
+          timestamp: new Date(now.getTime() - (totalPoints - 1 - i) * interval),
+          value: 11.5 + Math.cos(i * 0.08) * 0.4 + (Math.random() - 0.5) * 0.15
+        }))
+      },
+      {
+        sensor_type: 'temperature',
+        label: getText('sensor.temperature'),
+        unit: getTemperatureUnit(),
+        icon: '🌡️',
+        data_points: Array.from({ length: totalPoints }, (_, i) => ({
+          timestamp: new Date(now.getTime() - (totalPoints - 1 - i) * interval),
+          value: convertTemperature(25 + Math.sin(i * 0.04) * 3 + (Math.random() - 0.5) * 1.5)
+        }))
+      },
+      {
+        sensor_type: 'lux',
+        label: getText('sensor.lux'),
+        unit: 'Lux',
+        icon: '💡',
+        data_points: Array.from({ length: totalPoints }, (_, i) => ({
+          timestamp: new Date(now.getTime() - (totalPoints - 1 - i) * interval),
+          value: Math.max(0, 450 + Math.sin(i * 0.06) * 200 + (Math.random() - 0.5) * 100)
+        }))
+      },
+      {
+        sensor_type: 'battery_percentage',
+        label: getText('sensor.battery_percentage'),
+        unit: '%',
+        icon: '🔋',
+        data_points: Array.from({ length: totalPoints }, (_, i) => ({
+          timestamp: new Date(now.getTime() - (totalPoints - 1 - i) * interval),
+          value: Math.max(20, Math.min(100, 85 + Math.sin(i * 0.02) * 10 + (Math.random() - 0.5) * 3))
+        }))
+      }
+    ];
+  }, [getText, getTemperatureUnit, convertTemperature]);
+
+  useEffect(() => {
+    const fetchChartData = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        // Start with real-time data by default
+        const { data, isRealtime } = await fetchDataForRange('1m');
+        const chartData = convertToChartData(data, isRealtime, '1m');
+        setChartData(chartData);
+        
+        console.log('✅ Chart data loaded successfully');
+        
+      } catch (error) {
+        console.error('❌ Failed to load chart data:', error);
+        setError(error.message);
+        
+        // Fallback to mock data if API fails
+        console.log('🔄 Using mock data fallback');
+        setChartData(generateMockChartData());
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchChartData();
+  }, [getText, getTemperatureUnit, convertTemperature]);
+
+  return (
+    <UserLayout>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+        <div className="container mx-auto px-4 py-6">
+          {/* Header Section */}
+          <div className="mb-8">
+            <HeaderGlobal
+              title={getText('chart_title')}
+              subtitle={getText('chart_subtitle')}
+              online={true}
+            />
+          </div>
+
+          {/* Charts Section */}
+          {loading ? (
+            <div className="bg-white dark:bg-slate-800 rounded-xl p-8 shadow-sm border border-slate-200 dark:border-slate-700 mb-8">
+              <div className="flex items-center justify-center space-x-3">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="text-slate-600 dark:text-slate-300">{getText('loading')}</span>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-6 mb-8">
+              <div className="flex items-center space-x-3">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <h3 className="text-lg font-semibold text-red-800 dark:text-red-200">Error Loading Charts</h3>
+                  <p className="text-red-600 dark:text-red-300">{error}</p>
+                  <p className="text-sm text-red-500 dark:text-red-400 mt-2">Using fallback data for demonstration.</p>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Sensor Charts Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            {chartData.map((sensor, index) => (
+              <div key={sensor.sensor_type} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
+                <SensorChart
+                  sensorType={sensor.sensor_type}
+                  data={sensor.data_points}
+                  label={sensor.label}
+                  unit={sensor.unit}
+                  onDataFetch={(range) => handleChartDataFetch(sensor.sensor_type, range)}
+                />
+              </div>
+            ))}
+          </div>
+
+          <FooterGlobal />
+        </div>
+      </div>
+    </UserLayout>
+  );
+}

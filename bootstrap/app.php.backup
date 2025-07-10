@@ -1,0 +1,96 @@
+<?php
+
+use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Configuration\Exceptions;
+use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Console\Scheduling\Schedule;
+use Spatie\Permission\Middleware\RoleMiddleware;
+use Spatie\Permission\Middleware\PermissionMiddleware;
+use Spatie\Permission\Middleware\RoleOrPermissionMiddleware;
+use App\Http\Middleware\RedirectBasedOnRole;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+    )
+    ->withMiddleware(function (Middleware $middleware) {
+        $middleware->web(append: [
+            \App\Http\Middleware\HandleInertiaRequests::class,
+            \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+        ]);
+
+        $middleware->alias([
+            'role' => RoleMiddleware::class,
+            'permission' => PermissionMiddleware::class,
+            'role_or_permission' => RoleOrPermissionMiddleware::class,
+            'redirect.role' => RedirectBasedOnRole::class,
+        ]);
+    })
+    ->withSchedule(function (Schedule $schedule) {
+        // Generate sample sensor data every minute (for development)
+        $schedule->call(function () {
+            $sensors = \App\Models\Sensor::all();
+
+            foreach ($sensors as $sensor) {
+                $value = match ($sensor->type) {
+                    'voltage' => rand(220, 240),
+                    'current' => rand(0, 10),
+                    'temperature' => rand(20, 35),
+                    'light' => rand(100, 1000),
+                    default => 0,
+                };
+
+                \Log::info("Sensor ID: {$sensor->id}, Type: {$sensor->type}, Value: {$value}");
+
+                $sensor->data()->create([
+                    'value' => $value,
+                    'recorded_at' => now(),
+                ]);
+            }
+        })->everyMinute()->name('sample_data_generation');
+
+        // Database cleanup - run weekly on Sunday at 2 AM
+        $schedule->command('db:cleanup', ['--days' => 90])
+            ->weekly()
+            ->sundays()
+            ->at('02:00')
+            ->withoutOverlapping()
+            ->runInBackground()
+            ->name('weekly_database_cleanup');
+
+        // Database optimization - run monthly
+        $schedule->call(function () {
+            \Illuminate\Support\Facades\DB::statement('OPTIMIZE TABLE sensor_data');
+            \Illuminate\Support\Facades\DB::statement('OPTIMIZE TABLE logs');
+            \Illuminate\Support\Facades\DB::statement('OPTIMIZE TABLE users');
+            \Log::info('Database tables optimized successfully');
+        })
+            ->monthly()
+            ->at('03:00')
+            ->withoutOverlapping()
+            ->name('monthly_database_optimization');
+
+        // Disk space check - run daily
+        $schedule->call(function () {
+            $diskFree = disk_free_space('/');
+            $diskTotal = disk_total_space('/');
+            if ($diskTotal > 0) {
+                $diskUsagePercent = (($diskTotal - $diskFree) / $diskTotal) * 100;
+                
+                if ($diskUsagePercent > 80) {
+                    \Log::warning("Disk usage is high: {$diskUsagePercent}%");
+                }
+                
+                \Log::info("Disk usage: {$diskUsagePercent}%");
+            }
+        })
+            ->daily()
+            ->at('01:00')
+            ->name('daily_disk_space_check');
+    })
+    ->withExceptions(function (Exceptions $exceptions) {
+        //
+    })
+    ->create();
